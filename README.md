@@ -62,5 +62,4 @@ CircularDelay.h/cpp     环形延时缓冲
 ## 参考
 
 - Gao, Z. (2003). Scaling and bandwidth-parameterization based controller tuning. *ACC 2003*.
-- 参考实现: `D:\深圳理工大学\无人机\adrc\adrc.c`
 - 架构说明: `PID+ADRC架构说明.md`
