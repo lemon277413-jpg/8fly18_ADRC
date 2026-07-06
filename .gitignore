@@ -1,0 +1,27 @@
+# Arduino build artifacts
+build/
+*.elf
+*.hex
+*.bin
+
+# Backup files
+*.bak
+*.orig
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Serial monitor logs
+*.log
