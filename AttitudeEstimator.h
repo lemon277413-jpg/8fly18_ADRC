@@ -21,4 +21,5 @@ void GetDataMPU6050Rate(float &rollRate, float &pitchRate, float &yawRate);
 void GetDataMPU6050(float &roll, float &pitch, float &yaw, float &rollRate, float &pitchRate, float &yawRate, float &RawrollRate, float &RawpitchRate, float AE_RollOffset, float AE_PitchOffset);
 void get_Horizontal_heading_Acc(float& worldAccX, float& worldAccY);//m/s² 水平航向坐标系下
 void get_WorldAcc(float& worldAccX, float& worldAccY); //m/s² 世界坐标系下
+void ResetGyroIntegError(); // 重置Mahony陀螺零偏PI积分 (校准/初始化时调用)
 #endif

@@ -299,18 +299,24 @@ void loop() {
         yawOut = constrain(yawOut, -300.0f, 300.0f);
     
 
+        // 原子读取油门通道 (AVR上16-bit volatile int非原子, 关中断防竞态)
+        int throttle_rc;
+        noInterrupts();
+        throttle_rc = receiver_input[2];
+        interrupts();
+
         // TODO: 调参阶段 - pitch+roll+yaw 全部启用
 
         switch (state) {
             case FlightState::FLY:
             {
                 //电机操控
-                escCtrl(receiver_input[2], rollOut, pitchOut, yawOut);
+                escCtrl(throttle_rc, rollOut, pitchOut, yawOut);
                 break;
             }
             case FlightState::FLY_CALIBRATE:
             {
-                escCtrl(receiver_input[2], rollOut, pitchOut, yawOut);
+                escCtrl(throttle_rc, rollOut, pitchOut, yawOut);
                 break;
             }
             case FlightState::HOLD_POSITION:
@@ -321,7 +327,7 @@ void loop() {
                 }
                 else
                 {
-                    escCtrl(receiver_input[2], rollOut, pitchOut, yawOut);
+                    escCtrl(throttle_rc, rollOut, pitchOut, yawOut);
                 }
                 break;
             }
@@ -358,6 +364,15 @@ void loop() {
     {
         flag_50Hz = false; // 【关键】执行完立即清零，防止重复执行
 
+        // 原子读取遥控器数据 (AVR上16-bit volatile int非原子, 关中断防竞态)
+        int rc_ch0, rc_ch1, rc_ch2, rc_ch3;
+        noInterrupts();
+        rc_ch0 = receiver_input[0];
+        rc_ch1 = receiver_input[1];
+        rc_ch2 = receiver_input[2];
+        rc_ch3 = receiver_input[3];
+        interrupts();
+
         // ========== 调整顺序：先读取遥控指令，再处理状态机 ==========
         // 确保状态机内设置的targetRoll/targetPitch不会被遥控数据覆盖
         read_remote_control();
@@ -382,10 +397,10 @@ void loop() {
             // 解锁条件: Ch2<1100, Ch3>1900, Ch0<1100, Ch1<1100 保持 0.5秒 (25次)
             // ---------------------------------------------------------
             case FlightState::PROTECT: {
-                bool isUnlockCond = (receiver_input[2] < 1100) && 
-                                    (receiver_input[3] > 1900) && 
-                                    (receiver_input[0] < 1100) && 
-                                    (receiver_input[1] < 1100);
+                bool isUnlockCond = (rc_ch2 < 1100) &&
+                                    (rc_ch3 > 1900) &&
+                                    (rc_ch0 < 1100) &&
+                                    (rc_ch1 < 1100);
                 if (isUnlockCond) {
                     state_counter++;
                     if (state_counter >= 25) {
@@ -406,9 +421,9 @@ void loop() {
             // ---------------------------------------------------------
             case FlightState::INIT: {
                 // 检查进入校准的指令 (Yaw向左打满)
-                if (receiver_input[3] < 1100) {
+                if (rc_ch3 < 1100) {
                     state_counter++;
-                    if (state_counter >= 2) { //0.04秒后进入校准状态，快速响应
+                    if (state_counter >= 25) { // 0.5秒后进入校准状态 (25 ticks x 20ms)
                         state = FlightState::CALIBRATE;
                         state_counter = 0;
                         calibration_done = false; // 重置校准标志
@@ -416,9 +431,9 @@ void loop() {
                     }
                 } else {
                     state_counter = 0; // 摇杆回中，重置校准计时
-                    
+
                     // 正常起飞逻辑
-                    if (receiver_input[2] > 1150) {
+                    if (rc_ch2 > 1150) {
                         state = FlightState::FLY;
                         // 清空全部角度PID积分器（roll/pitch/yaw），防止地面待机积分饱和
                         pidController.cleanRollPIDData();
@@ -446,11 +461,13 @@ void loop() {
             // ---------------------------------------------------------
             case FlightState::CALIBRATE: {
                 state_counter++;
-                if (!calibration_done) {
+                // 等待1秒(50 ticks)让姿态估计收敛后再保存零偏
+                if (!calibration_done && state_counter >= 50) {
                     calib_roll_offset = roll;
                     calib_pitch_offset = pitch;
                     calibration_done = true;
-                    
+                    ResetGyroIntegError(); // 同步清零陀螺PI积分，防止历史漂移累积
+
                     Serial.print("Calibration Finished! Offsets -> R: ");
                     Serial.print(calib_roll_offset);
                     Serial.print(" , P: ");
@@ -472,7 +489,7 @@ void loop() {
             // ---------------------------------------------------------
             case FlightState::FLY: {
                 // 最高优先级：检查是否直接回保护
-                if (receiver_input[2] < 1100) {
+                if (rc_ch2 < 1100) {
                     state = FlightState::PROTECT;
                     state_counter = 0;
                     Serial.println("Landing... Entering PROTECT.");
@@ -480,8 +497,6 @@ void loop() {
                 }
 
                 if(HOLD_POSITION_return_lock == true || FLY_CALIBRATE_return_lock == true) {
-                    // 如果定高定点返回飞行的锁定标志位为真，说明刚从定高定点状态返回飞行状态.
-                    // 同时如果飞行校准返回飞行的锁定标志位为真，说明刚从飞行校准状态返回飞行状态.
                     state_counter++;
                     if (state_counter >= 100) { // 2秒后解除锁定
                         HOLD_POSITION_return_lock = false;
@@ -492,7 +507,7 @@ void loop() {
                     break; // 在锁定期间不响应其他切换指令
                 }
                 // 检查进入飞行校准 (Ch3 < 1100)
-                else if (receiver_input[3] < 1100 && !FLY_CALIBRATE_return_lock) {
+                else if (rc_ch3 < 1100 && !FLY_CALIBRATE_return_lock) {
                     state_counter++;
                     if (state_counter >= 2) { // 0.04秒
                         state = FlightState::FLY_CALIBRATE;
@@ -501,7 +516,7 @@ void loop() {
                     }
                 }
                 // 检查进入定高定点 (Ch3 > 1900)
-                else if (receiver_input[3] > 1900 && !HOLD_POSITION_return_lock) {
+                else if (rc_ch3 > 1900 && !HOLD_POSITION_return_lock) {
                     state_counter++;
                     if (state_counter >= 2) { // 0.04秒
                         state = FlightState::HOLD_POSITION;
@@ -521,10 +536,10 @@ void loop() {
             // ---------------------------------------------------------
             case FlightState::FLY_CALIBRATE: {
                 // 最高优先级：检查是否直接回保护
-                if (receiver_input[2] < 1100) {
+                if (rc_ch2 < 1100) {
                     state = FlightState::PROTECT;
                     state_counter = 0;
-                    Serial.println("Emergency Landing! Fly trim reset to 0.");
+                    Serial.println("Emergency Landing! (Fly trim values preserved in memory.)");
                     break;
                 }
 
@@ -532,7 +547,7 @@ void loop() {
                 if(state_counter < 100) { // 前2秒内，允许调整飞行零偏，但不响应切换回飞行状态的指令
                     state_counter++;
                 }
-                else if (receiver_input[3] < 1100) { // 锁定解除，检查返回飞行状态指令
+                else if (rc_ch3 < 1100) { // 锁定解除，检查返回飞行状态指令
                     state_counter++;
                     if(state_counter >= 102) {  //保持0.04s
                         state = FlightState::FLY;
@@ -556,12 +571,12 @@ void loop() {
                 // ====================== 核心：摇杆调整零偏 ======================
                 // ========== 新增：只有摇杆明显偏离中点才响应 (避免遥控器中点误差) ==========
                 // 激活条件：Roll > 1550 或 < 1450；Pitch > 1550 或 < 1450
-                bool roll_active = (receiver_input[0] > 1550) || (receiver_input[0] < 1450);
-                bool pitch_active = (receiver_input[1] > 1550) || (receiver_input[1] < 1450);
+                bool roll_active = (rc_ch0 > 1550) || (rc_ch0 < 1450);
+                bool pitch_active = (rc_ch1 > 1550) || (rc_ch1 < 1450);
 
                 // 计算摇杆偏离中立点的数值 (1500为中立点)
-                int roll_offset = receiver_input[0] - 1500;
-                int pitch_offset = -(receiver_input[1] - 1500);
+                int roll_offset = rc_ch0 - 1500;
+                int pitch_offset = -(rc_ch1 - 1500);
 
                 // 1. Roll轴零偏调整
                 if(roll_active) { // 只有激活时才调整
@@ -613,7 +628,7 @@ void loop() {
             case FlightState::HOLD_POSITION: {
                 // 最高优先级：检查是否直接回保护 (任何时候都有效)
 
-                if (receiver_input[2] < 1100) {
+                if (rc_ch2 < 1100) {
                     state = FlightState::PROTECT;
                     state_counter = 0;
                     Serial.println("Emergency Landing... Entering PROTECT.");
@@ -648,7 +663,7 @@ void loop() {
                     // 2. 锁存当前瞬时高度为目标高度
                     target_Height = MTF_Height;
                     // 3. 锁存当前油门为定高基础油门
-                    hold_base_throttle = receiver_input[2];
+                    hold_base_throttle = rc_ch2;
                     // 4. 清零PID积分项，避免手动飞行的历史积分干扰
                     // pidController.cleanPositionPIDData();
                     // pidController.cleanSpeedPIDData();
@@ -701,7 +716,7 @@ void loop() {
                     state_counter++;
                 } 
                 else { // 锁定解除，检查返回飞行状态指令
-                    if (receiver_input[3] > 1900) {
+                    if (rc_ch3 > 1900) {
                         state_counter++;
                         if (state_counter >= 102) { // 2秒后再保持0.04s
                             state = FlightState::FLY;
@@ -1151,8 +1166,15 @@ void cal_Height_PID()
 }
 
 void read_remote_control() {
-    targetRoll = (receiver_input[0] - 1500)/500.0f * 10.0f; // 【注意】加上 .0f 避免整数除法
-    targetPitch = -(receiver_input[1] - 1500)/500.0f * 10.0f;
+    // 原子读取遥控器数据 (AVR上16-bit volatile int非原子, 关中断防竞态)
+    int ch0, ch1;
+    noInterrupts();
+    ch0 = receiver_input[0];
+    ch1 = receiver_input[1];
+    interrupts();
+
+    targetRoll = (ch0 - 1500)/500.0f * 10.0f; // 【注意】加上 .0f 避免整数除法
+    targetPitch = -(ch1 - 1500)/500.0f * 10.0f;
     targetYaw = 0.0f;
 
     // 使用 Arduino 内置的 constrain()

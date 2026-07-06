@@ -602,6 +602,16 @@ void GetDataMPU6050(float &roll, float &pitch, float &yaw, float &rollRate, floa
     
 }
 
+/**
+ * 重置Mahony滤波器陀螺零偏PI积分
+ * 在保存校准零偏时调用，防止历史积分误差导致姿态漂移
+ */
+void ResetGyroIntegError() {
+    GyroIntegError.x = 0.0f;
+    GyroIntegError.y = 0.0f;
+    GyroIntegError.z = 0.0f;
+}
+
 float last_worldAccX = 0.0f;
 float last_worldAccY = 0.0f;
 
