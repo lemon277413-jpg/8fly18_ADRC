@@ -1341,7 +1341,13 @@ void debugPrint() {
 
     Serial.print(targetRollRate);   Serial.print(",");
     Serial.print(targetPitchRate);  Serial.print(",");
-    Serial.print(targetYawRate);
+    Serial.print(targetYawRate);    Serial.print(",");
+
+    // 四路PWM输出 (LU, RU, RD, LD)
+    Serial.print(ESC_PWM[0]); Serial.print(",");
+    Serial.print(ESC_PWM[1]); Serial.print(",");
+    Serial.print(ESC_PWM[2]); Serial.print(",");
+    Serial.print(ESC_PWM[3]);
 
     Serial.println();
 }
