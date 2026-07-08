@@ -134,10 +134,15 @@ float rollRate_200hz = 0.0f, pitchRate_200hz = 0.0f, yawRate_200hz = 0.0f;
 // PID控制器 (仅高度环、位置环、速度环; 角度环已由ADRC替代)
 PIDController pidController;
 
-// ADRC控制器 (二阶LADRC: 3阶LESO + PD控制律, 替代PID+一阶ADRC)
+// ADRC控制器 — Roll/Pitch使用二阶LADRC (3阶LESO + PD控制律)
 ADRC_Param adrcRoll;
 ADRC_Param adrcPitch;
-ADRC_Param adrcYaw;
+
+// Yaw使用简单P速率控制 (参照Drone_Master_ADRC, 八轴同轴反扭矩控制权弱无需ADRC)
+#define K_YAW_ANGLE_P  5.0f    // 偏航角度P: 角度误差(deg) → 速率目标(deg/s)
+#define K_YAW_RATE_P   2.0f    // 偏航速率P: 速率误差(deg/s) → PWM修正量
+float targetYawRate = 0.0f;    // 偏航角速率目标 (deg/s), 100Hz外环输出→200Hz内环输入
+float yawOutDebug = 0.0f;      // yaw控制输出 (debug用, 200Hz更新)
 
 //定高定点状态相关变量
 int hold_base_throttle = 1000; // 定高基础油门，进入状态时锁存
@@ -241,10 +246,9 @@ void setup() {
     // ADRC_Init(Ts, wo, B, KpOut, KpIn, KdIn, max_u)
     //   Roll:  I_xx=0.13, 4电机/侧, 臂=0.30m → B=18.0 °/s²/PWM
     //   Pitch: I_yy=0.56, 同上             → B=4.2  °/s²/PWM
-    //   Yaw:   I_zz=0.69, 8电机同轴反扭矩 → B=2.0  °/s²/PWM
+    //   Yaw:   同轴反扭矩控制权弱 → P速率控制 KpAngle=5.0 KpRate=2.0 (非ADRC)
     ADRC_Init(&adrcRoll,  0.005f, 20.0f, 18.0f, 3.5f, 1.0f, 0.1f, 150.0f);
     ADRC_Init(&adrcPitch, 0.005f, 10.0f,  4.2f, 3.5f, 1.0f, 0.1f, 150.0f);
-    ADRC_Init(&adrcYaw,   0.005f, 15.0f,  2.0f, 5.0f, 1.0f, 0.1f, 200.0f);
 
     initTimer5_200Hz();
 
@@ -272,9 +276,8 @@ void loop() {
         throttle_pre = receiver_input[2];
         interrupts();
 
-        // 内环：二阶ADRC控制 (3阶LESO + PD控制律)
-        // 仅在飞行状态下运行，避免ESO在电机未响应时发散
-        // 油门>1200才激活: 防止飞机还在地上时ESO因地面对抗而发散(尤其yaw)
+        // 内环: Roll/Pitch用二阶ADRC (3阶LESO+PD), Yaw用简单P速率控制
+        // 油门>1200才激活: 防止ESO在地面发散
         bool adrcActive = (state == FlightState::FLY ||
                            state == FlightState::FLY_CALIBRATE ||
                            state == FlightState::HOLD_POSITION) &&
@@ -282,19 +285,19 @@ void loop() {
 
         float rollOut, pitchOut, yawOut;
         if (adrcActive) {
-            // 3阶LESO观测 (从角速度测量值估计 速度/加速度/扰动)
+            // Roll/Pitch: 3阶LESO观测 + PD控制律
             ADRC_LESO(&adrcRoll, rollRate_200hz);
             ADRC_LESO(&adrcPitch, pitchRate_200hz);
-            ADRC_LESO(&adrcYaw, yawRate_200hz);
-            // PD控制律 + 扰动前馈补偿
             rollOut  = ADRC_InnerLoop(&adrcRoll);
             pitchOut = ADRC_InnerLoop(&adrcPitch);
-            yawOut   = ADRC_InnerLoop(&adrcYaw);
+            // Yaw: 简单P速率控制 (同轴反扭矩控制权弱, 无需ADRC)
+            yawOut = K_YAW_RATE_P * (targetYawRate - yawRate_200hz);
+            yawOut = constrain(yawOut, -200.0f, 200.0f);
+            yawOutDebug = yawOut;
         } else {
-            // 非飞行状态：冻结ADRC，持续复位ESO状态
+            // 非飞行状态：冻结ADRC+清零yaw输出
             ADRC_ParamClear(&adrcRoll);
             ADRC_ParamClear(&adrcPitch);
-            ADRC_ParamClear(&adrcYaw);
             rollOut = 0.0f;
             pitchOut = 0.0f;
             yawOut = 0.0f;
@@ -432,10 +435,10 @@ void loop() {
                     // 正常起飞逻辑
                     if (rc_ch2 > 1150) {
                         state = FlightState::FLY;
-                        // 复位ADRC的ESO状态，防止地面扰动估计残留
+                        // 复位ADRC的ESO状态+Yaw速率目标，防止地面扰动估计残留
                         ADRC_ParamClear(&adrcRoll);
                         ADRC_ParamClear(&adrcPitch);
-                        ADRC_ParamClear(&adrcYaw);
+                        targetYawRate = 0.0f;
                         // 清空飞行校准偏置
                         fly_calib_roll_offset = 0.0f;
                         fly_calib_pitch_offset = 0.0f;
@@ -1162,11 +1165,11 @@ void read_remote_control() {
 }
 
 void calculateADRC() {
-    // ADRC外环: AttOut = KpOut * (targetAngle - measuredAngle)
-    // 三轴均使用角度P控制，将角度误差(deg)转换为角速度目标(deg/s)
+    // Roll/Pitch外环: AttOut = KpOut * (target - measured) → 角速度目标(deg/s)
     ADRC_OuterLoop(&adrcRoll,  targetRoll,  roll);
     ADRC_OuterLoop(&adrcPitch, targetPitch, pitch);
-    ADRC_OuterLoop(&adrcYaw,   targetYaw,   yaw);
+    // Yaw外环: 角度P → 角速率目标 (简单P, 非ADRC — 同轴反扭矩控制权弱)
+    targetYawRate = K_YAW_ANGLE_P * (targetYaw - yaw);
 }
 
 void escCtrl(int throttle, float rollCORR, float pitchCORR, float yawCORR) {
@@ -1289,11 +1292,11 @@ void pwmReceiveYaw() {
 void debugPrint() {
     // ========== ADRC调参专用输出 (CSV格式, 50Hz) ==========
     // 列说明:
-    //   0-2:   roll, pitch, yaw         — 姿态角度 (°)
-    //   3-5:   rU, pU, yU               — ADRC控制输出u (电机修正量)
-    //   6-8:   rW, pW, yW               — ESO总扰动估计w (ADRC核心指标)
-    //   9-11:  rRate, pRate, yRate      — 实测角速度 (°/s)
-    //  12-14: rAttOut, pAttOut, yAttOut — 目标角速度 (ADRC外环AttOut)
+    //   0-2:   roll, pitch, yaw          — 姿态角度 (°)
+    //   3-5:   rU, pU, yU                — Roll/Pitch:ADRC控制u, Yaw:P速率输出
+    //   6-8:   rW, pW, yawRateTgt        — Roll/Pitch:ESO扰动w, Yaw:角速率目标
+    //   9-11:  rRate, pRate, yRate       — 实测角速度 (°/s)
+    //  12-14: rAttOut, pAttOut, yawOutDbg— Roll/Pitch:ADRC外环AttOut, Yaw:实际输出
     //  15-18: 四路PWM值
 
     // 姿态角度
@@ -1304,12 +1307,12 @@ void debugPrint() {
     // ADRC控制输出 (核心: 观察是否饱和/振荡)
     Serial.print(adrcRoll.u);  Serial.print(",");
     Serial.print(adrcPitch.u); Serial.print(",");
-    Serial.print(adrcYaw.u);   Serial.print(",");
+    Serial.print(yawOutDebug);   Serial.print(",");
 
-    // ADRC扰动估计 (核心: w代表总扰动, 平稳飞行时应稳定在某个值)
+    // Roll/Pitch ESO扰动估计 + Yaw速率目标 (Yaw用P控制无ESO)
     Serial.print(adrcRoll.w);  Serial.print(",");
     Serial.print(adrcPitch.w); Serial.print(",");
-    Serial.print(adrcYaw.w);   Serial.print(",");
+    Serial.print(targetYawRate); Serial.print(",");
 
     // 实测角速度 vs 目标角速度 (观察跟踪性能)
     Serial.print(rollRate_200hz);   Serial.print(",");
@@ -1318,7 +1321,7 @@ void debugPrint() {
 
     Serial.print(adrcRoll.AttOut);   Serial.print(",");
     Serial.print(adrcPitch.AttOut);  Serial.print(",");
-    Serial.print(adrcYaw.AttOut);    Serial.print(",");
+    Serial.print(targetYawRate);     Serial.print(",");
 
     // 四路PWM输出 (LU, RU, RD, LD)
     Serial.print(ESC_PWM[0]); Serial.print(",");
