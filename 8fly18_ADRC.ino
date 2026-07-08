@@ -247,7 +247,7 @@ void setup() {
     // 参数: Ts, b0, wc, wo, max_output
     rollADRC.init(0.005f,  18.0f,  20.0f, 60.0f, 150.0f);   // 横滚: P_eff=0.28, wo/wc=3, 限幅150
     pitchADRC.init(0.005f,  4.2f,  2.0f,  6.0f, 150.0f);   // 俯仰: P_eff=0.48, wo/wc=3, 限幅150
-    yawADRC.init(0.005f,   0.15f, 25.0f, 36.0f, 250.0f);    // 偏航: P_eff=13 (低控制力矩需高增益)
+    yawADRC.init(0.005f,   2.0f,  8.0f, 24.0f, 200.0f);    // 偏航: P_eff=4.0, 提高b0防ESO地面发散
 
     // 角度环PID仍然需要初始化
     pidController.cleanRollPIDData();
@@ -274,11 +274,19 @@ void loop() {
         // 读取陀螺仪角速度数据 (200Hz)，并进行低通滤波
         read_IMU_Rate();
 
+        // 原子读取油门，用于判断飞机是否已离地
+        int throttle_pre;
+        noInterrupts();
+        throttle_pre = receiver_input[2];
+        interrupts();
+
         // 内环：ADRC角速度环控制 (替代PID)
         // 仅在飞行状态下运行，避免ESO在电机未响应时发散
+        // 油门>1200才激活: 防止飞机还在地上时ESO因地面对抗而发散(尤其yaw)
         bool adrcActive = (state == FlightState::FLY ||
                            state == FlightState::FLY_CALIBRATE ||
-                           state == FlightState::HOLD_POSITION);
+                           state == FlightState::HOLD_POSITION) &&
+                           throttle_pre > 1200;
 
         float rollOut, pitchOut, yawOut;
         if (adrcActive) {
@@ -299,24 +307,18 @@ void loop() {
         yawOut = constrain(yawOut, -300.0f, 300.0f);
     
 
-        // 原子读取油门通道 (AVR上16-bit volatile int非原子, 关中断防竞态)
-        int throttle_rc;
-        noInterrupts();
-        throttle_rc = receiver_input[2];
-        interrupts();
-
         // TODO: 调参阶段 - pitch+roll+yaw 全部启用
 
         switch (state) {
             case FlightState::FLY:
             {
                 //电机操控
-                escCtrl(throttle_rc, rollOut, pitchOut, yawOut);
+                escCtrl(throttle_pre, rollOut, pitchOut, yawOut);
                 break;
             }
             case FlightState::FLY_CALIBRATE:
             {
-                escCtrl(throttle_rc, rollOut, pitchOut, yawOut);
+                escCtrl(throttle_pre, rollOut, pitchOut, yawOut);
                 break;
             }
             case FlightState::HOLD_POSITION:
@@ -327,7 +329,7 @@ void loop() {
                 }
                 else
                 {
-                    escCtrl(throttle_rc, rollOut, pitchOut, yawOut);
+                    escCtrl(throttle_pre, rollOut, pitchOut, yawOut);
                 }
                 break;
             }
@@ -1199,10 +1201,10 @@ void escCtrl(int throttle, float rollCORR, float pitchCORR, float yawCORR) {
     ESC_PWM[0] = throttle - temp;
 	ESC_PWM[0] = constrain(ESC_PWM[0], ESC_MIN_PWM, ESC_MAX_PWM);
 
+
     temp = (int)(rollCORR + pitchCORR + yawCORR);
     ESC_PWM[1] = throttle - temp;
 	ESC_PWM[1] = constrain(ESC_PWM[1], ESC_MIN_PWM, ESC_MAX_PWM);
-
     temp = (int)(rollCORR - pitchCORR - yawCORR);
     ESC_PWM[2] = throttle - temp;
 	ESC_PWM[2] = constrain(ESC_PWM[2], ESC_MIN_PWM, ESC_MAX_PWM);
@@ -1210,7 +1212,6 @@ void escCtrl(int throttle, float rollCORR, float pitchCORR, float yawCORR) {
     temp = (int)(-rollCORR - pitchCORR + yawCORR);
     ESC_PWM[3] = throttle - temp;
     ESC_PWM[3] = constrain(ESC_PWM[3], ESC_MIN_PWM, ESC_MAX_PWM);
-
     unsigned long start_time = micros();
     unsigned long t0 = ESC_PWM[0] + start_time;
     unsigned long t1 = ESC_PWM[1] + start_time;
@@ -1318,6 +1319,7 @@ void debugPrint() {
     //   6-8:   rZ2, pZ2, yZ2             — ESO扰动估计 (ADRC核心指标)
     //   9-11:  rRate, pRate, yRate       — 实测角速度 (°/s)
     //  12-14: rTgtRate, pTgtRate, yTgtRate — 目标角速度 (°/s)
+    //  15-17：四路pwm值
 
     // 姿态角度
     Serial.print(roll);    Serial.print(",");
