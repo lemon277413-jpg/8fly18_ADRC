@@ -16,9 +16,6 @@ private:
 	PID rollAnglePID;
 	PID pitchAnglePID;
 	PID yawAnglePID;
-	PID yawRatePID;
-	PID rollRatePID;
-	PID pitchRatePID;
 	PID heightPID;
 	PID heightRatePID; // 高度速度环PID
 	PID posXPID; // X轴位置环PID
@@ -39,9 +36,6 @@ public:
 	void calCurrentRollAnglePID(float measureRoll, float targetRoll);
 	void calCurrentPitchAnglePID(float measurePitch, float targetPitch);
 	void calCurrentYawAnglePID(float measureYaw, float targetYaw);
-	void calCurrentYawRatePID(float measureYaw, float targetYaw);
-	void calCurrentRollRatePID(float measureRollRate, float targetRollRate);
-	void calCurrentPitchRatePID(float measurePitchRate, float targetPitchRate);
 	void calCurrentHeightPID(float measureHeight, float targetHeight);
 	void calCurrentHeightRatePID(float measureHeightRate, float targetHeightRate);
 	void calCurrentPosXPID(float measure_Pos_X, float target_Pos_X);

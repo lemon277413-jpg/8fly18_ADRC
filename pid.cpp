@@ -19,21 +19,6 @@
 #define ANGLE_YAW_KI 	0      // 偏航角速度积分系数
 #define ANGLE_YAW_KD 	0      // 偏航角速度微分系数
 
-// 角速度环PID参数 - 偏航轴
-#define RATE_YAW_KP 	5    // 偏航角速度比例系数
-#define RATE_YAW_KI 	0.0   // 偏航角速度积分系数
-#define RATE_YAW_KD 	2.0//1.25    // 偏航角速度微分系数
-
-// 角速度环PID参数 - 俯仰轴
-#define RATE_PITCH_KP 	6     // 俯仰角速度比例系数
-#define RATE_PITCH_KI 	0.00    // 俯仰角速度积分系数
-#define RATE_PITCH_KD 	0.35   // 俯仰角速度微分系数//0.045
-
-// 角速度环PID参数 - 横滚轴
-#define RATE_ROLL_KP 	  4      // 横滚角速度比例系数
-#define RATE_ROLL_KI  	0.2//0.2    // 横滚角速度积分系数
-#define RATE_ROLL_KD  	0.25    // 横滚角速度微分系数//0.1
-
 // 高度外环PID参数
 #define HEIGHT_KP      2.0//1.0    // 高度比例系数
 #define HEIGHT_KI      0.1    // 高度积分系数
@@ -93,21 +78,6 @@ PIDController::PIDController() {
 	yawAnglePID.KI = ANGLE_YAW_KI;
 	yawAnglePID.KD = ANGLE_YAW_KD;
 
-	// 初始化角速度环PID参数 - 偏航轴
-	yawRatePID.KP = RATE_YAW_KP;
-	yawRatePID.KI = RATE_YAW_KI;
-	yawRatePID.KD = RATE_YAW_KD;
-	
-	// 初始化角速度环PID参数 - 横滚轴
-	rollRatePID.KP = RATE_ROLL_KP;
-	rollRatePID.KI = RATE_ROLL_KI;
-	rollRatePID.KD = RATE_ROLL_KD;
-	
-	// 初始化角速度环PID参数 - 俯仰轴
-	pitchRatePID.KP = RATE_PITCH_KP;
-	pitchRatePID.KI = RATE_PITCH_KI;
-	pitchRatePID.KD = RATE_PITCH_KD;
-
 	// 初始化高度PID参数
 	heightPID.KP = HEIGHT_KP;
 	heightPID.KI = HEIGHT_KI;
@@ -141,9 +111,6 @@ PIDController::PIDController() {
 	rollAnglePID.lastTimeStamp = micros();
 	pitchAnglePID.lastTimeStamp = micros();
 	yawAnglePID.lastTimeStamp = micros();
-	yawRatePID.lastTimeStamp = micros();
-	rollRatePID.lastTimeStamp = micros();
-	pitchRatePID.lastTimeStamp = micros();
 	heightPID.lastTimeStamp = micros();
 	heightRatePID.lastTimeStamp = micros();
 	posXPID.lastTimeStamp = micros();
@@ -317,51 +284,6 @@ void PIDController::calCurrentYawAnglePID(float measureYaw, float targetYaw) {
 	calCurrentPID(&yawAnglePID, targetYaw, measureYaw, dt);
 }
 
-/**
- * 计算偏航角速度环PID
- * @param measureYaw 测量的偏航角速度
- * @param targetYaw  目标偏航角速度
- */
-void PIDController::calCurrentYawRatePID(float measureYawRate, float targetYawRate) {
-	float t = 0.0, dt = 0.0;
-	t = micros();  // 获取当前时间戳
-	// 计算时间间隔，如果是第一次调用则dt为0
-	dt = (yawRatePID.lastTimeStamp > 0) ? (t - yawRatePID.lastTimeStamp): 0;
-	yawRatePID.lastTimeStamp = t;  // 更新时间戳
-
-	calCurrentPID(&yawRatePID, targetYawRate, measureYawRate, dt);
-}
-
-/**
- * 计算横滚角速度环PID
- * @param measureRollRate 测量的横滚角速度
- * @param targetRollRate  目标横滚角速度
- */
-void PIDController::calCurrentRollRatePID(float measureRollRate, float targetRollRate){
-	float t = 0.0, dt = 0.0;
-	t = micros();  // 获取当前时间戳
-	// 计算时间间隔，如果是第一次调用则dt为0
-	dt = (rollRatePID.lastTimeStamp > 0) ? (t - rollRatePID.lastTimeStamp) : 0;
-	rollRatePID.lastTimeStamp = t;  // 更新时间戳
-
-	calCurrentPID(&rollRatePID, targetRollRate, measureRollRate, dt);
-}
-
-/**
- * 计算俯仰角速度环PID
- * @param measurePitchRate 测量的俯仰角速度
- * @param targetPitchRate  目标俯仰角速度
- */
-void PIDController::calCurrentPitchRatePID(float measurePitchRate, float targetPitchRate) {
-	float t = 0.0, dt = 0.0;
-	t = micros();  // 获取当前时间戳
-	// 计算时间间隔，如果是第一次调用则dt为0
-	dt = (pitchRatePID.lastTimeStamp > 0) ? (t - pitchRatePID.lastTimeStamp) : 0;
-	pitchRatePID.lastTimeStamp = t;  // 更新时间戳
-
-	calCurrentPID(&pitchRatePID, targetPitchRate, measurePitchRate, dt);
-}
-
 float PIDController::getPosXCorrect() {
 	return posXPID.output;  // 返回X轴位置PID输出
 }
@@ -400,18 +322,8 @@ float PIDController::getHeightCorrect() {
  * @return        PID输出值
  */
 float PIDController::getRollCorrect(PIDKind pidKind) {
-	switch (pidKind)
-	{ 
-	case ANGLE:
-		return rollAnglePID.output;  // 返回横滚角度环输出
-		break;
-	case RATE:
-		return rollRatePID.output;   // 返回横滚角速度环输出
-		break;
-	default:
-		return 0;
-		break;
-	}
+	(void)pidKind;  // 仅保留ANGLE兼容，RATE已由ADRC替代
+	return rollAnglePID.output;
 }
 
 /**
@@ -420,18 +332,8 @@ float PIDController::getRollCorrect(PIDKind pidKind) {
  * @return        PID输出值
  */
 float PIDController::getPitchCorrect(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return pitchAnglePID.output; // 返回俯仰角度环输出
-		break;
-	case RATE:
-		return pitchRatePID.output;  // 返回俯仰角速度环输出
-		break;
-	default:
-		return 0;
-		break;
-	}
+	(void)pidKind;  // 仅保留ANGLE兼容，RATE已由ADRC替代
+	return pitchAnglePID.output;
 }
 
 /**
@@ -441,18 +343,8 @@ float PIDController::getPitchCorrect(PIDKind pidKind) {
  * @note          偏航轴只有角速度环，角度环返回0
  */
 float PIDController::getYawCorrect(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return yawAnglePID.output;                    // 偏航角度环未实现，返回0
-		break;
-	case RATE:
-		return yawRatePID.output;    // 返回偏航角速度环输出
-		break;
-	default:
-		return 0;
-		break;
-	}
+	(void)pidKind;  // 仅保留ANGLE兼容，RATE已由ADRC替代
+	return yawAnglePID.output;
 }
 
 /* =============================================================
@@ -469,18 +361,8 @@ float PIDController::getYawCorrect(PIDKind pidKind) {
  * @return        当前误差值
  */
 float PIDController::getRollError(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return rollAnglePID.error;   // 返回横滚角度环误差
-		break;
-	case RATE:
-		return rollRatePID.error;    // 返回横滚角速度环误差
-		break;
-	default:
-		return 0;
-		break;
-	}
+	(void)pidKind;
+	return rollAnglePID.error;
 }
 
 /**
@@ -489,18 +371,8 @@ float PIDController::getRollError(PIDKind pidKind) {
  * @return        当前积分值
  */
 float PIDController::getRollInteg(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return rollAnglePID.integ;   // 返回横滚角度环积分值
-		break;
-	case RATE:
-		return rollRatePID.integ;    // 返回横滚角速度环积分值
-		break;
-	default:
-		return 0;
-		break;
-	}
+	(void)pidKind;
+	return rollAnglePID.integ;
 }
 
 /**
@@ -509,18 +381,8 @@ float PIDController::getRollInteg(PIDKind pidKind) {
  * @return        当前微分值
  */
 float PIDController::getRollDeriv(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return rollAnglePID.deriv;   // 返回横滚角度环微分值
-		break;
-	case RATE:
-		return rollRatePID.deriv;    // 返回横滚角速度环微分值
-		break;
-	default:
-		return 0;
-		break;
-	}
+	(void)pidKind;
+	return rollAnglePID.deriv;
 }
 
 /* =============================================================
@@ -537,18 +399,8 @@ float PIDController::getRollDeriv(PIDKind pidKind) {
  * @return        当前误差值
  */
 float PIDController::getPitchError(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return pitchAnglePID.error;  // 返回俯仰角度环误差
-		break;
-	case RATE:
-		return pitchRatePID.error;   // 返回俯仰角速度环误差
-		break;
-	default:
-		return 0;
-		break;
-	} 
+	(void)pidKind;
+	return pitchAnglePID.error;
 }
 
 /**
@@ -557,18 +409,8 @@ float PIDController::getPitchError(PIDKind pidKind) {
  * @return        当前积分值
  */
 float PIDController::getPitchInteg(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return pitchAnglePID.integ;  // 返回俯仰角度环积分值
-		break;
-	case RATE:
-		return pitchRatePID.integ;   // 返回俯仰角速度环积分值
-		break;
-	default:
-		return 0;
-		break;
-	} 
+	(void)pidKind;
+	return pitchAnglePID.integ;
 }
 
 /**
@@ -577,26 +419,15 @@ float PIDController::getPitchInteg(PIDKind pidKind) {
  * @return        当前微分值
  */
 float PIDController::getPitchDeriv(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return pitchAnglePID.deriv;  // 返回俯仰角度环微分值
-		break;
-	case RATE:
-		return pitchRatePID.deriv;   // 返回俯仰角速度环微分值
-		break;
-	default:
-		return 0;
-		break;
-	} 
+	(void)pidKind;
+	return pitchAnglePID.deriv;
 }
 
 /* =============================================================
- * 
+ *
  * 偏航轴相关信息获取函数
  * 用于调试和监控PID控制器状态
- * 注意：偏航轴只有角速度环，角度环相关函数返回0
- * 
+ *
  * =============================================================
  */
 
@@ -604,63 +435,30 @@ float PIDController::getPitchDeriv(PIDKind pidKind) {
  * 获取偏航轴误差值
  * @param pidKind PID类型（ANGLE：角度环，RATE：角速度环）
  * @return        当前误差值
- * @note          偏航角度环未实现，返回0
  */
 float PIDController::getYawError(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return 0;                    // 偏航角度环未实现
-		break;
-	case RATE:
-		return yawRatePID.error;     // 返回偏航角速度环误差
-		break;
-	default:
-		return 0;
-		break;
-	} 
+	(void)pidKind;
+	return yawAnglePID.error;
 }
 
 /**
  * 获取偏航轴积分值
  * @param pidKind PID类型（ANGLE：角度环，RATE：角速度环）
  * @return        当前积分值
- * @note          偏航角度环未实现，返回0
  */
 float PIDController::getYawInteg(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return 0;                    // 偏航角度环未实现
-		break;
-	case RATE:
-		return yawRatePID.integ;     // 返回偏航角速度环积分值
-		break;
-	default:
-		return 0;
-		break;
-	} 
+	(void)pidKind;
+	return yawAnglePID.integ;
 }
 
 /**
  * 获取偏航轴微分值
  * @param pidKind PID类型（ANGLE：角度环，RATE：角速度环）
  * @return        当前微分值
- * @note          偏航角度环未实现，返回0
  */
 float PIDController::getYawDeriv(PIDKind pidKind) {
-	switch (pidKind)
-	{
-	case ANGLE:
-		return 0;                    // 偏航角度环未实现
-		break;
-	case RATE:
-		return yawRatePID.deriv;     // 返回偏航角速度环微分值
-		break;
-	default:
-		return 0;
-		break;
-	} 
+	(void)pidKind;
+	return yawAnglePID.deriv;
 }
 
 /**
@@ -682,8 +480,7 @@ void PIDController::cleanData(PID *PID) {
  * 包括角度环和角速度环
  */
 void PIDController::cleanRollPIDData() {
-	cleanData(&rollAnglePID);    // 清空横滚角度环数据
-	cleanData(&rollRatePID);     // 清空横滚角速度环数据
+	cleanData(&rollAnglePID);
 }
 
 /**
@@ -691,8 +488,7 @@ void PIDController::cleanRollPIDData() {
  * 包括角度环和角速度环
  */
 void PIDController::cleanPitchPIDData() {
-	cleanData(&pitchAnglePID);   // 清空俯仰角度环数据
-	cleanData(&pitchRatePID);    // 清空俯仰角速度环数据
+	cleanData(&pitchAnglePID);
 }
 
 /**
@@ -700,8 +496,7 @@ void PIDController::cleanPitchPIDData() {
  * 包括角度环和角速度环
  */
 void PIDController::cleanYawPIDData() {
-	cleanData(&yawAnglePID);      // 清空偏航角度环数据
-	cleanData(&yawRatePID);       // 清空偏航角速度环数据
+	cleanData(&yawAnglePID);
 }
 
 void PIDController::cleanHeightPIDData() {
