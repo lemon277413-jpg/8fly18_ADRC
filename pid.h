@@ -13,9 +13,7 @@ typedef struct {
 
 class PIDController {
 private:
-	PID rollAnglePID;
-	PID pitchAnglePID;
-	PID yawAnglePID;
+	// 高度环 + 位置环 + 速度环 PID (角度环已由ADRC替代)
 	PID heightPID;
 	PID heightRatePID; // 高度速度环PID
 	PID posXPID; // X轴位置环PID
@@ -28,14 +26,7 @@ private:
 	float minMax(float value, float min, float max);
 
 public:
-	enum PIDKind {
-		ANGLE,
-		RATE
-	};
 	PIDController();
-	void calCurrentRollAnglePID(float measureRoll, float targetRoll);
-	void calCurrentPitchAnglePID(float measurePitch, float targetPitch);
-	void calCurrentYawAnglePID(float measureYaw, float targetYaw);
 	void calCurrentHeightPID(float measureHeight, float targetHeight);
 	void calCurrentHeightRatePID(float measureHeightRate, float targetHeightRate);
 	void calCurrentPosXPID(float measure_Pos_X, float target_Pos_X);
@@ -43,16 +34,7 @@ public:
 	void calCurrentPosYPID(float measure_Pos_Y, float target_Pos_Y);
 	void calCurrentSpeedYPID(float measure_Speed_Y, float target_Speed_Y);
 
-
-	/* ===================================================================
-		* 
-		*  PID 修正值
-		* 
-		* ===================================================================
-		*/
-	float getRollCorrect(PIDKind pidKind);
-	float getPitchCorrect(PIDKind pidKind);
-	float getYawCorrect(PIDKind pidKind);
+	// PID 输出获取 (高度/位置/速度环)
 	float getHeightCorrect();
 	float getHeightRateCorrect();
 	float getPosXCorrect();
@@ -60,39 +42,5 @@ public:
 	float getPosYCorrect();
 	float getSpeedYCorrect();
 
-
-	/* =============================================================
-	* 
-	* roll 相关信息
-	* 
-	* =============================================================
-	*/
-	float getRollError(PIDKind kind);
-	float getRollInteg(PIDKind kind);
-	float getRollDeriv(PIDKind kind);
-
-	/* =============================================================
-		* 
-		* pitch 相关信息
-		* 
-		* =============================================================
-		*/
-	float getPitchError(PIDKind kind);
-	float getPitchInteg(PIDKind kind);
-	float getPitchDeriv(PIDKind kind);
-
-	/* =============================================================
-		* 
-		* yaw 相关信息
-		* 
-		* =============================================================
-		*/
-	float getYawError(PIDKind kind);
-	float getYawInteg(PIDKind kind);
-	float getYawDeriv(PIDKind kind);
-
-	void cleanRollPIDData();
-	void cleanPitchPIDData();
-	void cleanYawPIDData();
 	void cleanHeightPIDData();
 };
