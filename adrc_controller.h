@@ -9,8 +9,14 @@
  *   内环: 3阶LESO估计 SpeEst/AccEst/w → PD控制律
  *         u = KpIn*(AttOut-SpeEst) - KdIn*AccEst - w/B
  *
+ * 调参方法 (参照 Drone_Master_ADRC README):
+ *   1. 先调B: 从较大值逐步减小, 至出现微小自激振荡后适当增大
+ *   2. B调好后, 被控对象近似双积分器串联
+ *   3. 调wc: KpIn = wc², KdIn = 2×wc (带宽参数化, 类似PID)
+ *
  * 与Drone_Master_ADRC的主要差异:
  *   - LESO增益改用带宽参数化 (β1=3wo, β2=3wo², β3=wo³), 替代固定值30/300/1000
+ *   - 内环PD增益由wc自动计算: KpIn=wc², KdIn=2×wc (遵循参考调参指南)
  *   - 采样周期T=0.005s (200Hz), 参考为T=0.002s (500Hz)
  *   - 陀螺输入已是deg/s浮点值, 无需GyroToDeg转换
  *   - 控制输出u为PWM修正量 (-200~+200量级)
@@ -25,9 +31,10 @@
 typedef struct {
     // ---- 控制参数 (用户可调) ----
     float KpOut;     // 外环P增益: 角度误差(deg) → 角速度目标(deg/s)
-    float KpIn;      // 内环P增益: 角速度跟踪比例增益
-    float KdIn;      // 内环D增益: 角加速度阻尼增益
+    float KpIn;      // 内环P增益: = wc² (由wc自动计算)
+    float KdIn;      // 内环D增益: = 2×wc (由wc自动计算)
     float B;         // 控制增益: deg/s² per PWM单位 (物理控制力矩)
+    float wc;        // 内环控制器带宽 (rad/s), 主调参旋钮
 
     // ---- 状态变量 (ESO估计值 + 控制量) ----
     float AttOut;    // 外环输出: 目标角速度 (deg/s)
@@ -61,14 +68,13 @@ typedef struct {
  * @param p       ADRC参数结构体指针
  * @param Ts      采样周期(秒), 200Hz对应0.005
  * @param wo      观测器带宽(rad/s), 推荐10~30
+ * @param wc      内环控制器带宽(rad/s), 推荐3~8; KpIn=wc², KdIn=2×wc
  * @param B       控制增益 (deg/s² per PWM单位)
- * @param KpOut   外环比例增益
- * @param KpIn    内环比例增益
- * @param KdIn    内环微分增益
+ * @param KpOut   外环角度比例增益
  * @param max_u   输出限幅(绝对值)
  */
-void ADRC_Init(ADRC_Param *p, float Ts, float wo, float B,
-               float KpOut, float KpIn, float KdIn, float max_u);
+void ADRC_Init(ADRC_Param *p, float Ts, float wo, float wc, float B,
+               float KpOut, float max_u);
 
 /**
  * 3阶线性扩张状态观测器 (LESO)

@@ -35,20 +35,23 @@
 /* ================================================================
  * ADRC_Init - 参数初始化
  * ================================================================ */
-void ADRC_Init(ADRC_Param *p, float Ts, float wo, float B,
-               float KpOut, float KpIn, float KdIn, float max_u)
+void ADRC_Init(ADRC_Param *p, float Ts, float wo, float wc, float B,
+               float KpOut, float max_u)
 {
     // 配置参数
     p->Ts    = Ts;
     p->wo    = wo;
+    p->wc    = wc;
     p->B     = B;
     p->KpOut = KpOut;
-    p->KpIn  = KpIn;
-    p->KdIn  = KdIn;
     p->max_u = max_u;
 
-    // 带宽法参数化 (Gao, 2003)
-    // 3阶ESO极点全配置在 -wo
+    // 内环PD增益 — 带宽参数化 (参照 Drone_Master_ADRC 调参指南)
+    // B调好后被控对象近似双积分器, KpIn≈wc², KdIn≈2×wc
+    p->KpIn  = wc * wc;
+    p->KdIn  = 2.0f * wc;
+
+    // ESO增益 — 3阶极点全配置在 -wo (Gao, 2003)
     p->beta1 = 3.0f * wo;
     p->beta2 = 3.0f * wo * wo;
     p->beta3 = wo * wo * wo;

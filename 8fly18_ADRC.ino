@@ -242,13 +242,16 @@ void setup() {
     SetupMPU6050();
 
     // 二阶LADRC控制器 (3阶LESO + PD控制律, 移植自Drone_Master_ADRC)
+    // 调参方法 (参照源仓库README):
+    //   1. 先调B: 从较大值逐步减小至微振后适当增大
+    //   2. B定后调wc: KpIn=wc², KdIn=2×wc (主旋钮, 越大响应越快但可能振荡)
+    //   3. 最后调wo: ESO观测器带宽 (一般 3~5倍 wc)
     // B参数: T-Motor AIR2216 KV880 + T1045 实测 → Δ拉力=1.73g/PWM/电机 @ 50%油门
-    // ADRC_Init(Ts, wo, B, KpOut, KpIn, KdIn, max_u)
-    //   Roll:  I_xx=0.13, 4电机/侧, 臂=0.30m → B=18.0 °/s²/PWM
-    //   Pitch: I_yy=0.56, 同上             → B=4.2  °/s²/PWM
-    //   Yaw:   同轴反扭矩控制权弱 → P速率控制 KpAngle=5.0 KpRate=2.0 (非ADRC)
-    ADRC_Init(&adrcRoll,  0.005f, 20.0f, 18.0f, 3.5f, 1.0f, 0.1f, 150.0f);
-    ADRC_Init(&adrcPitch, 0.005f, 10.0f,  4.2f, 3.5f, 1.0f, 0.1f, 150.0f);
+    // ADRC_Init(Ts, wo, wc, B, KpOut, max_u)
+    //   Roll:  I_xx=0.13, 4电机/侧, 臂=0.30m → B=18.0, wc=3.0→KpIn=9  KdIn=6
+    //   Pitch: I_yy=0.56, 同上             → B=4.2,  wc=2.0→KpIn=4  KdIn=4
+    ADRC_Init(&adrcRoll,  0.005f, 20.0f, 3.0f, 18.0f, 3.5f, 150.0f);
+    ADRC_Init(&adrcPitch, 0.005f, 10.0f, 2.0f,  4.2f, 3.5f, 150.0f);
 
     initTimer5_200Hz();
 
