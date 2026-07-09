@@ -139,8 +139,8 @@ ADRC_Param adrcRoll;
 ADRC_Param adrcPitch;
 
 // Yaw使用简单P速率控制 (参照Drone_Master_ADRC, 八轴同轴反扭矩控制权弱无需ADRC)
-#define K_YAW_ANGLE_P  5.0f    // 偏航角度P: 角度误差(deg) → 速率目标(deg/s)
-#define K_YAW_RATE_P   2.0f    // 偏航速率P: 速率误差(deg/s) → PWM修正量
+#define K_YAW_ANGLE_P  6.0f    // 偏航角度P: 角度误差(deg) → 速率目标(deg/s)
+#define K_YAW_RATE_P   4.0f    // 偏航速率P: 速率误差(deg/s) → PWM修正量
 float targetYawRate = 0.0f;    // 偏航角速率目标 (deg/s), 100Hz外环输出→200Hz内环输入
 float yawOutDebug = 0.0f;      // yaw控制输出 (debug用, 200Hz更新)
 
@@ -250,8 +250,8 @@ void setup() {
     // ADRC_Init(Ts, wo, wc, B, KpOut, max_u)
     //   Roll:  I_xx=0.13, 4电机/侧, 臂=0.30m → B=18.0, wc=3.0→KpIn=9  KdIn=6
     //   Pitch: I_yy=0.56, 同上             → B=4.2,  wc=2.0→KpIn=4  KdIn=4
-    ADRC_Init(&adrcRoll,  0.005f, 20.0f, 3.0f, 18.0f, 3.5f, 150.0f);
-    ADRC_Init(&adrcPitch, 0.005f, 10.0f, 2.0f,  4.2f, 3.5f, 150.0f);
+    ADRC_Init(&adrcRoll,  0.005f, 63.0f, 21.0f, 135.0f, 3.5f, 150.0f);
+    ADRC_Init(&adrcPitch, 0.005f, 45.0f, 15.0f,  134.0f, 3.5f, 150.0f);
 
     initTimer5_200Hz();
 
@@ -1305,26 +1305,26 @@ void debugPrint() {
     // 姿态角度
     Serial.print(roll);    Serial.print(",");
     Serial.print(pitch);   Serial.print(",");
-    Serial.print(yaw);     Serial.print(",");
+    Serial.print(yaw);     Serial.print(", ");
 
     // ADRC控制输出 (核心: 观察是否饱和/振荡)
     Serial.print(adrcRoll.u);  Serial.print(",");
     Serial.print(adrcPitch.u); Serial.print(",");
-    Serial.print(yawOutDebug);   Serial.print(",");
+    Serial.print(yawOutDebug);   Serial.print(", ");
 
     // Roll/Pitch ESO扰动估计 + Yaw速率目标 (Yaw用P控制无ESO)
     Serial.print(adrcRoll.w);  Serial.print(",");
     Serial.print(adrcPitch.w); Serial.print(",");
-    Serial.print(targetYawRate); Serial.print(",");
+    Serial.print(targetYawRate); Serial.print(", ");
 
     // 实测角速度 vs 目标角速度 (观察跟踪性能)
     Serial.print(rollRate_200hz);   Serial.print(",");
     Serial.print(pitchRate_200hz);  Serial.print(",");
-    Serial.print(yawRate_200hz);    Serial.print(",");
+    Serial.print(yawRate_200hz);    Serial.print(", ");
 
     Serial.print(adrcRoll.AttOut);   Serial.print(",");
     Serial.print(adrcPitch.AttOut);  Serial.print(",");
-    Serial.print(targetYawRate);     Serial.print(",");
+    Serial.print(targetYawRate);     Serial.print(", ");
 
     // 四路PWM输出 (LU, RU, RD, LD)
     Serial.print(ESC_PWM[0]); Serial.print(",");
