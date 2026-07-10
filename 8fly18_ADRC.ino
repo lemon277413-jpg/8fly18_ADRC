@@ -138,9 +138,18 @@ PIDController pidController;
 ADRC_Param adrcRoll;
 ADRC_Param adrcPitch;
 
+
+
+
 // Yaw使用简单P速率控制 (参照Drone_Master_ADRC, 八轴同轴反扭矩控制权弱无需ADRC)
 #define K_YAW_ANGLE_P  6.0f    // 偏航角度P: 角度误差(deg) → 速率目标(deg/s)
 #define K_YAW_RATE_P   4.0f    // 偏航速率P: 速率误差(deg/s) → PWM修正量
+
+
+
+
+
+
 float targetYawRate = 0.0f;    // 偏航角速率目标 (deg/s), 100Hz外环输出→200Hz内环输入
 float yawOutDebug = 0.0f;      // yaw控制输出 (debug用, 200Hz更新)
 
@@ -294,7 +303,7 @@ void loop() {
             rollOut  = ADRC_InnerLoop(&adrcRoll);
             pitchOut = ADRC_InnerLoop(&adrcPitch);
             // Yaw: 简单P速率控制 (同轴反扭矩控制权弱, 无需ADRC)
-            yawOut = K_YAW_RATE_P * (targetYawRate - yawRate_200hz);
+            yawOut = -K_YAW_RATE_P * (targetYawRate - yawRate_200hz);
             yawOut = constrain(yawOut, -200.0f, 200.0f);
             yawOutDebug = yawOut;
         } else {
